@@ -69,7 +69,7 @@ A daily routine checks expiry dates and sends at most one Telegram message per d
 ### Receiving warnings
 
 36. As the stock owner, I want to be warned 7 days before and on the expiry day for Pantry items, because they are consumed quickly.
-37. As the stock owner, I want to be warned 90, 30, and 7 days before and on the expiry day for Reserve items, so that I have time to eat them day to day before they expire.
+37. As the stock owner, I want to be warned 30 and 7 days before and on the expiry day for Reserve items, so that I have time to eat them day to day before they expire.
 38. As the stock owner, I want at most one Telegram message per day combining all items, so that I am not bothered.
 39. As the stock owner, I want no message on days without a new milestone, so that warnings stay relevant.
 40. As the stock owner, I want messages to come from the bot I already use and start with "Stock", so that I can tell them apart from site alerts.
@@ -146,7 +146,7 @@ A daily routine checks expiry dates and sends at most one Telegram message per d
 
 ### Warnings
 
-- Default milestones: Pantry at 7 and 0 days; Reserve at 90, 30, 7, and 0 days. A food's exception replaces its group's milestones.
+- Default milestones: Pantry at 7 and 0 days; Reserve at 30, 7, and 0 days. A food's exception replaces its group's milestones.
 - For each purchase with a balance and an expiry date, with `d` days left, the **current milestone** is the smallest milestone greater than or equal to `d`. A purchase with negative `d` uses milestone 0.
 - A purchase enters the digest when it has a current milestone and it differs from the last warned milestone. The digest shows the real days left (or how many days ago it expired).
 - After sending, the current milestone is saved as the last warned milestone of each included purchase. After milestone 0, the purchase triggers no new warnings.

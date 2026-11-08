@@ -11,12 +11,12 @@
 
 **Blocked by:** 06: Expiry warnings on Telegram
 
-Status: ready-for-agent
+Status: ready-for-human
 
-- [ ] The copy is consistent even with the service in use and can be opened as a valid database
-- [ ] There is at most one copy per day, even with several runs in a day
-- [ ] Only the 7 most recent copies stay in the folder
-- [ ] Retention does not delete files that are not copies made by the routine
-- [ ] The backup runs even if sending to Telegram fails
-- [ ] The destination folder is created if it does not exist
-- [ ] Code, identifiers, comments, tests, logs, commit messages, documentation, interface text, and Telegram messages are in English, not pt-BR
+- [x] The copy is consistent even with the service in use and can be opened as a valid database
+- [x] There is at most one copy per day, even with several runs in a day
+- [x] Only the 7 most recent copies stay in the folder
+- [x] Retention does not delete files that are not copies made by the routine
+- [x] The backup runs even if sending to Telegram fails
+- [x] The destination folder is created if it does not exist
+- [x] Code, identifiers, comments, tests, logs, commit messages, documentation, interface text, and Telegram messages are in English, not pt-BR

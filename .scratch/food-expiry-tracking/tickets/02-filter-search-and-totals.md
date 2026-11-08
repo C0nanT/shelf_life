@@ -11,10 +11,10 @@
 
 **Blocked by:** 01: Record a purchase and see it in the list
 
-Status: ready-for-agent
+Status: ready-for-human
 
-- [ ] The filter shows only purchases from the chosen group, keeping the list order
-- [ ] Search finds foods by name, case-insensitively
-- [ ] The totals tab adds up each food's purchases and shows the split by group
-- [ ] Totals add up purchases in units of the same family (g and kg, ml and L) correctly, with no rounding errors
-- [ ] Code, identifiers, comments, tests, logs, commit messages, documentation, interface text, and Telegram messages are in English, not pt-BR
+- [x] The filter shows only purchases from the chosen group, keeping the list order
+- [x] Search finds foods by name, case-insensitively
+- [x] The totals tab adds up each food's purchases and shows the split by group
+- [x] Totals add up purchases in units of the same family (g and kg, ml and L) correctly, with no rounding errors
+- [x] Code, identifiers, comments, tests, logs, commit messages, documentation, interface text, and Telegram messages are in English, not pt-BR
