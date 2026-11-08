@@ -11,13 +11,13 @@
 
 **Blocked by:** 01: Record a purchase and see it in the list, 04: Removals and history
 
-Status: ready-for-agent
+Status: ready-for-human
 
-- [ ] Moving a whole purchase changes its group
-- [ ] Moving part creates another purchase with the same expiry date in the destination group and reduces the original
-- [ ] Moving more than what is available is rejected
-- [ ] Editing quantity, expiry date, unit within the same family, or group updates list and totals
-- [ ] Deleting a purchase removes it from the list and totals
-- [ ] Editing and deleting create no line in the removal history
-- [ ] Earlier removals of a deleted purchase stay in the history
-- [ ] Code, identifiers, comments, tests, logs, commit messages, documentation, interface text, and Telegram messages are in English, not pt-BR
+- [x] Moving a whole purchase changes its group
+- [x] Moving part creates another purchase with the same expiry date in the destination group and reduces the original
+- [x] Moving more than what is available is rejected
+- [x] Editing quantity, expiry date, unit within the same family, or group updates list and totals
+- [x] Deleting a purchase removes it from the list and totals
+- [x] Editing and deleting create no line in the removal history
+- [x] Earlier removals of a deleted purchase stay in the history
+- [x] Code, identifiers, comments, tests, logs, commit messages, documentation, interface text, and Telegram messages are in English, not pt-BR

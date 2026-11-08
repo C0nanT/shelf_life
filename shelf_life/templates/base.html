@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Shelf Life</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #fff; --text: #1f2933; --muted: #6b7785; --border: #e2e6ea;
+    --accent: #2f7d5b; --accent-hover: #256849; --danger: #b42318; --danger-bg: #fdecea;
+    --ok-bg: #e6f4ec; --row-hover: #f0f7f3;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14181c; --card: #1c2228; --text: #e6e9ec; --muted: #93a0ad; --border: #2c343c;
+      --accent: #46a77d; --accent-hover: #5bbb92; --danger: #ff8a80; --danger-bg: #3a1f1d;
+      --ok-bg: #173126; --row-hover: #222b32;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    background: var(--bg); color: var(--text); margin: 0; line-height: 1.5;
+  }
+  nav {
+    background: var(--card); border-bottom: 1px solid var(--border);
+    padding: .5rem max(1rem, calc((100% - 56rem) / 2)); display: flex; flex-wrap: wrap; gap: .25rem;
+  }
+  nav a { padding: .4rem .8rem; border-radius: 6px; color: var(--muted); text-decoration: none; font-weight: 500; }
+  nav a:hover { background: var(--row-hover); color: var(--accent); }
+  main { max-width: 56rem; margin: 1.5rem auto; padding: 0 1rem; }
+  h1, h2 { margin: 0 0 1rem; font-weight: 600; }
+  a { color: var(--accent); }
+  table {
+    border-collapse: separate; border-spacing: 0; width: 100%; background: var(--card);
+    border: 1px solid var(--border); border-radius: 10px; margin: 1rem 0;
+  }
+  th:first-child { border-top-left-radius: 9px; }
+  th:last-child { border-top-right-radius: 9px; }
+  tr:last-child td:first-child { border-bottom-left-radius: 9px; }
+  tr:last-child td:last-child { border-bottom-right-radius: 9px; }
+  th, td { text-align: left; padding: .6rem .8rem; border-bottom: 1px solid var(--border); }
+  th { font-size: .8rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); background: var(--bg); }
+  tr:last-child td { border-bottom: 0; }
+  tbody tr:hover { background: var(--row-hover); }
+  tr.expired { background: var(--danger-bg); color: var(--danger); font-weight: 600; }
+  form { margin: .5rem 0; }
+  label { display: inline-flex; flex-direction: column; gap: .2rem; margin: 0 .8rem .8rem 0; font-size: .85rem; color: var(--muted); }
+  input, select {
+    font: inherit; color: var(--text); background: var(--card); border: 1px solid var(--border);
+    border-radius: 6px; padding: .45rem .6rem;
+  }
+  input:focus, select:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: transparent; }
+  button {
+    font: inherit; font-weight: 500; cursor: pointer; color: #fff; background: var(--accent);
+    border: 0; border-radius: 6px; padding: .5rem 1rem;
+  }
+  button:hover { background: var(--accent-hover); }
+  td.actions { width: 3rem; text-align: right; }
+  details.menu { position: relative; display: inline-block; }
+  details.menu summary {
+    list-style: none; cursor: pointer; user-select: none; padding: .1rem .55rem;
+    border-radius: 6px; font-size: 1.2rem; line-height: 1.4; color: var(--muted);
+  }
+  details.menu summary::-webkit-details-marker { display: none; }
+  details.menu summary:hover, details.menu[open] summary { background: var(--row-hover); color: var(--accent); }
+  .menu-list {
+    position: absolute; right: 0; top: 100%; z-index: 10; min-width: 11rem; padding: .3rem;
+    background: var(--card); border: 1px solid var(--border); border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, .15); text-align: left; font-weight: 400;
+  }
+  .menu-list a, .menu-list button {
+    display: block; width: 100%; text-align: left; padding: .45rem .7rem; border: 0; border-radius: 6px;
+    background: transparent; color: var(--text); font: inherit; font-size: .9rem; font-weight: 400;
+    text-decoration: none; cursor: pointer;
+  }
+  .menu-list a:hover, .menu-list button:hover { background: var(--row-hover); color: var(--accent); }
+  .menu-list button.danger, .menu-list button.danger:hover { color: var(--danger); }
+  .menu-list button.danger:hover { background: var(--danger-bg); }
+  .menu-list form { display: block; margin: 0; }
+  td form { display: inline; margin: 0; }
+  td:not(.actions) button { padding: .25rem .6rem; font-size: .85rem; background: transparent; color: var(--danger); border: 1px solid var(--border); }
+  td:not(.actions) button:hover { background: var(--danger-bg); }
+  .bar {
+    --bar: #2f9e6b; --bar-bg: #8c98a4; position: relative; min-width: 8rem; height: 1.5rem;
+    border-radius: 999px; background: var(--bar-bg); overflow: hidden;
+  }
+  .bar-fill { position: absolute; inset: 0 auto 0 0; min-width: 1.5rem; background: var(--bar); border-radius: 999px; }
+  .bar-label {
+    position: relative; display: block; text-align: center; line-height: 1.5rem;
+    font-size: .8rem; font-weight: 600; color: #fff; text-shadow: 0 1px 2px rgba(0, 0, 0, .55); white-space: nowrap;
+  }
+  .bar.green { --bar: #2f9e6b; }
+  .bar.yellow { --bar: #d9a406; }
+  .bar.red { --bar: #d64545; }
+  .bar.expired { --bar: #8e1b1b; }
+  @media (prefers-color-scheme: dark) { .bar { --bar-bg: #3b454e; } }
+  .hint { color: var(--muted); font-size: .9rem; margin: 0 0 .5rem; }
+  .muted { color: var(--muted); }
+  .error { color: var(--danger); background: var(--danger-bg); padding: .6rem .8rem; border-radius: 6px; }
+  .added { color: var(--accent); background: var(--ok-bg); padding: .6rem .8rem; border-radius: 6px; }
+</style>
+</head>
+<body>
+<nav><a href="{{ url_for('web.index') }}">Stock</a><a href="{{ url_for('web.totals_page') }}">Totals</a><a href="{{ url_for('web.new_purchase') }}">New purchase</a><a href="{{ url_for('web.new_removal') }}">Remove</a><a href="{{ url_for('web.history') }}">History</a><a href="{{ url_for('web.foods_page') }}">Foods</a></nav>
+<main>
+{% block content %}{% endblock %}
+</main>
+</body>
+</html>

@@ -1,0 +1,41 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Record a removal</h1>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<form method="post" action="{{ url_for('web.create_removal') }}">
+  <p><label>Food
+    <select name="name" id="food" required>
+      <option value="">Choose a food</option>
+      {% for name, unit in foods %}<option value="{{ name }}" data-unit="{{ unit }}"{% if form.get('name') == name %} selected{% endif %}>{{ name }}</option>{% endfor %}
+    </select></label></p>
+  <p><label>Quantity <input name="quantity" value="{{ form.get('quantity', '') }}" required></label>
+  <label>Unit <select name="unit" id="unit">{% for u in units %}<option{% if form.get('unit') == u %} selected{% endif %}>{{ u }}</option>{% endfor %}</select></label></p>
+  <p><label>Reason <select name="reason"><option>used</option><option>discarded</option></select></label></p>
+  <p><label>Deduct from
+    <select name="purchase_id" id="purchase">
+      <option value="">Nearest expiry first</option>
+      {% for p in purchases %}<option value="{{ p.id }}" data-food="{{ p.name }}"{% if form.get('purchase_id')|string == p.id|string %} selected{% endif %}>{{ p.quantity }} {{ p.unit }}, {{ p.expiry_display or "no expiry" }}, {{ p.group }}</option>{% endfor %}
+    </select></label></p>
+  <button>Remove</button>
+</form>
+<script>
+  // Show only the purchases of the chosen food; default the unit to the food's own.
+  var food = document.getElementById("food");
+  var unit = document.getElementById("unit");
+  var purchase = document.getElementById("purchase");
+  function sync(changed) {
+    var chosen = food.value;
+    Array.prototype.forEach.call(purchase.options, function (o) {
+      if (!o.dataset.food) return;
+      var show = o.dataset.food === chosen;
+      o.hidden = !show;
+      o.disabled = !show;
+      if (!show && o.selected) purchase.value = "";
+    });
+    var opt = food.options[food.selectedIndex];
+    if (changed && opt && opt.dataset.unit) unit.value = opt.dataset.unit;
+  }
+  food.addEventListener("change", function () { sync(true); });
+  sync(false);
+</script>
+{% endblock %}

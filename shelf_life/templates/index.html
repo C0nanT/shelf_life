@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Stock</h1>
+<form method="get" action="{{ url_for('web.index') }}">
+  <select name="group">
+    <option value="">All groups</option>
+    {% for g in groups %}<option value="{{ g }}"{% if g == group %} selected{% endif %}>{{ g }}</option>{% endfor %}
+  </select>
+  <input type="search" name="q" value="{{ search }}" placeholder="Search by name">
+  <button type="submit">Filter</button>
+</form>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
+<table>
+<tr><th>Food</th><th>Quantity</th><th>Expiry</th><th>Days left</th><th>Group</th><th>Actions</th></tr>
+{% for p in purchases %}
+<tr{% if p.expired %} class="expired"{% endif %}>
+  <td>{{ p.name }}</td><td>{{ p.quantity }} {{ p.unit }}</td>
+  <td>{{ p.expiry_display or "" }}</td>
+  <td>{% if p.days_left is not none %}
+    <div class="bar {{ p.urgency }}" title="{{ p.days_left }} days left">
+      <div class="bar-fill" style="width: {{ p.shelf_pct }}%"></div>
+      <span class="bar-label">{% if p.days_left < 0 %}expired {{ -p.days_left }}d ago{% elif p.days_left == 0 %}today{% else %}{{ p.days_left }} {{ "day" if p.days_left == 1 else "days" }}{% endif %}</span>
+    </div>{% else %}<span class="muted">&mdash;</span>{% endif %}</td>
+  <td>{{ p.group }}</td>
+  <td class="actions">
+    <details class="menu">
+      <summary aria-label="Actions for {{ p.name }}">&#8942;</summary>
+      <div class="menu-list">
+        <form method="post" action="{{ url_for('web.move_purchase', purchase_id=p.id) }}">
+          <input type="hidden" name="group" value="{{ p.other_group }}">
+          <button type="submit">Move to {{ p.other_group }}</button>
+        </form>
+        <a href="{{ url_for('web.new_removal', purchase_id=p.id, name=p.name, unit=p.unit) }}">Remove</a>
+        <a href="{{ url_for('web.edit_purchase_page', purchase_id=p.id) }}">Edit</a>
+        <form method="post" action="{{ url_for('web.delete_purchase', purchase_id=p.id) }}" onsubmit="return confirm('Delete this purchase? It is not recorded as used or discarded.')">
+          <button type="submit" class="danger">Delete</button>
+        </form>
+      </div>
+    </details>
+  </td>
+</tr>
+{% else %}
+<tr><td colspan="6">No purchases yet.</td></tr>
+{% endfor %}
+</table>
+<script>
+  // Close an open actions menu when clicking elsewhere or pressing Escape.
+  document.addEventListener("click", function (e) {
+    document.querySelectorAll("details.menu[open]").forEach(function (d) {
+      if (!d.contains(e.target)) d.removeAttribute("open");
+    });
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape")
+      document.querySelectorAll("details.menu[open]").forEach(function (d) { d.removeAttribute("open"); });
+  });
+</script>
+{% endblock %}

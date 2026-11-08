@@ -1,0 +1,307 @@
+"""Web layer: translates requests into Stock calls."""
+from flask import Blueprint, current_app, g, jsonify, redirect, render_template, request, url_for
+
+from . import db, units
+from .warnings import DEFAULT_MILESTONES
+from .stock import GROUPS, NeedsConfirmation, NotFound, Stock, StockError
+
+bp = Blueprint("web", __name__)
+
+UNIT_CHOICES = tuple(units.UNITS)
+
+
+def get_stock():
+    if "stock" not in g:
+        g.conn = db.connect(current_app.config["DATABASE"])
+        g.stock = Stock(g.conn, current_app.config["CLOCK"])
+    return g.stock
+
+
+@bp.teardown_app_request
+def close_db(_exc):
+    conn = g.pop("conn", None)
+    if conn is not None:
+        conn.close()
+
+
+def _purchase_json(p):
+    return {
+        "id": p.id, "food_id": p.food_id, "name": p.name,
+        "quantity": units.format_quantity(p.quantity), "unit": p.unit,
+        "expiry": p.expiry.isoformat() if p.expiry else None,
+        "expiry_display": p.expiry_display, "group": p.group, "expired": p.expired,
+        "days_left": p.days_left, "shelf_pct": p.shelf_pct, "urgency": p.urgency,
+    }
+
+
+def _record(fields):
+    return get_stock().record_purchase(
+        fields.get("name"), fields.get("quantity"), fields.get("unit"),
+        fields.get("expiry"), fields.get("group"),
+    )
+
+
+@bp.post("/api/purchases")
+def api_record_purchase():
+    try:
+        purchase_id = _record(request.get_json(silent=True) or {})
+    except StockError as e:
+        return jsonify(error=str(e)), 400
+    return jsonify(id=purchase_id), 201
+
+
+def _totals_json(totals):
+    return [{
+        "name": t["name"], "unit": t["unit"],
+        "total": units.format_quantity(t["total"]),
+        "by_group": {g: units.format_quantity(q) for g, q in t["by_group"].items()},
+    } for t in totals]
+
+
+@bp.get("/api/purchases")
+def api_list_purchases():
+    try:
+        purchases = get_stock().list_purchases(
+            request.args.get("group"), request.args.get("q"))
+    except StockError as e:
+        return jsonify(error=str(e)), 400
+    return jsonify([_purchase_json(p) for p in purchases])
+
+
+@bp.get("/api/totals")
+def api_totals():
+    return jsonify(_totals_json(get_stock().totals()))
+
+
+@bp.get("/totals")
+def totals_page():
+    return render_template("totals.html", totals=_totals_json(get_stock().totals()),
+                           groups=GROUPS)
+
+
+@bp.get("/api/foods")
+def api_suggest_foods():
+    return jsonify(get_stock().suggest_foods(request.args.get("q", "")))
+
+
+def _other_group(group):
+    return "Reserve" if group == "Pantry" else "Pantry"
+
+
+@bp.get("/")
+def index():
+    group, search = request.args.get("group", ""), request.args.get("q", "")
+    try:
+        found = get_stock().list_purchases(group, search)
+        error = None
+    except StockError as e:
+        found, error = [], str(e)
+    purchases = [dict(_purchase_json(p), other_group=_other_group(p.group)) for p in found]
+    return render_template("index.html", purchases=purchases,
+                           groups=GROUPS, group=group, search=search, error=error)
+
+
+@bp.get("/purchases/new")
+def new_purchase():
+    return render_template("new_purchase.html", units=UNIT_CHOICES, groups=GROUPS,
+                           form={"group": request.args.get("group", "")}, error=None,
+                           added=request.args.get("added"))
+
+
+@bp.post("/purchases")
+def create_purchase():
+    try:
+        _record(request.form)
+    except StockError as e:
+        return render_template("new_purchase.html", units=UNIT_CHOICES, groups=GROUPS,
+                               form=request.form, error=str(e), added=None), 400
+    if "again" in request.form:
+        return redirect(url_for("web.new_purchase", added=request.form.get("name", "").strip(),
+                                group=request.form.get("group", "")))
+    return redirect(url_for("web.index"))
+
+
+def _remove(fields):
+    purchase_id = fields.get("purchase_id")
+    try:
+        purchase_id = int(purchase_id) if purchase_id not in (None, "") else None
+    except (TypeError, ValueError):
+        raise StockError("Purchase must be a number") from None
+    get_stock().record_removal(
+        fields.get("name"), fields.get("quantity"), fields.get("unit"),
+        fields.get("reason"), purchase_id,
+    )
+
+
+def _removal_page(form, error):
+    purchases = [_purchase_json(p) for p in get_stock().list_purchases()]
+    foods = {}
+    for p in purchases:
+        foods.setdefault(p["name"], p["unit"])
+    return render_template("new_removal.html", units=UNIT_CHOICES, form=form,
+                           purchases=purchases, foods=sorted(foods.items(), key=lambda f: f[0].casefold()),
+                           error=error)
+
+
+@bp.post("/api/removals")
+def api_record_removal():
+    try:
+        _remove(request.get_json(silent=True) or {})
+    except StockError as e:
+        return jsonify(error=str(e)), 400
+    return jsonify(ok=True), 201
+
+
+@bp.get("/api/removals")
+def api_list_removals():
+    return jsonify(get_stock().list_removals())
+
+
+@bp.get("/history")
+def history():
+    return render_template("history.html", removals=get_stock().list_removals())
+
+
+@bp.get("/removals/new")
+def new_removal():
+    return _removal_page(request.args, None)
+
+
+@bp.post("/removals")
+def create_removal():
+    try:
+        _remove(request.form)
+    except StockError as e:
+        return _removal_page(request.form, str(e)), 400
+    return redirect(url_for("web.history"))
+
+
+def _status(e):
+    if isinstance(e, NotFound):
+        return 404
+    return 409 if isinstance(e, NeedsConfirmation) else 400
+
+
+FOOD_FIELDS = ("name", "unit", "milestones")
+
+
+@bp.get("/api/foods/all")
+def api_list_foods():
+    return jsonify(get_stock().list_foods())
+
+
+@bp.patch("/api/foods/<int:food_id>")
+def api_update_food(food_id):
+    body = request.get_json(silent=True) or {}
+    try:
+        get_stock().update_food(
+            food_id, confirm_merge=bool(body.get("confirm_merge")),
+            **{k: body[k] for k in FOOD_FIELDS if k in body})
+    except StockError as e:
+        return jsonify(error=str(e),
+                       needs_confirmation=isinstance(e, NeedsConfirmation)), _status(e)
+    return jsonify(ok=True)
+
+
+def _foods_page(error=None, confirm=None, form=None, status=200):
+    return render_template("foods.html", foods=get_stock().list_foods(),
+                           units=UNIT_CHOICES, defaults=DEFAULT_MILESTONES, error=error,
+                           confirm=confirm, form=form or {}), status
+
+
+@bp.get("/foods")
+def foods_page():
+    return _foods_page()
+
+
+@bp.post("/foods/<int:food_id>")
+def update_food(food_id):
+    fields = {k: request.form[k] for k in FOOD_FIELDS if k in request.form}
+    try:
+        get_stock().update_food(food_id, confirm_merge="confirm_merge" in request.form,
+                                **fields)
+    except NeedsConfirmation as e:
+        return _foods_page(confirm={"id": food_id, "message": str(e)},
+                           form=request.form, status=409)
+    except NotFound:
+        return "Food not found", 404
+    except StockError as e:
+        return _foods_page(error=str(e), status=400)
+    return redirect(url_for("web.foods_page"))
+
+
+@bp.post("/api/purchases/<int:purchase_id>/move")
+def api_move_purchase(purchase_id):
+    body = request.get_json(silent=True) or {}
+    try:
+        new_id = get_stock().move_purchase(
+            purchase_id, body.get("group"), body.get("quantity"), body.get("unit"))
+    except StockError as e:
+        return jsonify(error=str(e)), _status(e)
+    return jsonify(id=new_id)
+
+
+@bp.patch("/api/purchases/<int:purchase_id>")
+def api_edit_purchase(purchase_id):
+    try:
+        get_stock().edit_purchase(purchase_id, **(request.get_json(silent=True) or {}))
+    except StockError as e:
+        return jsonify(error=str(e)), _status(e)
+    return jsonify(ok=True)
+
+
+@bp.delete("/api/purchases/<int:purchase_id>")
+def api_delete_purchase(purchase_id):
+    try:
+        get_stock().delete_purchase(purchase_id)
+    except StockError as e:
+        return jsonify(error=str(e)), _status(e)
+    return jsonify(ok=True)
+
+
+def _edit_page(purchase_id, form, error):
+    try:
+        purchase = _purchase_json(get_stock().get_purchase(purchase_id))
+    except NotFound:
+        return "Purchase not found", 404
+    return render_template("edit_purchase.html", p=purchase, units=UNIT_CHOICES,
+                           groups=GROUPS, form=form, error=error), (400 if error else 200)
+
+
+@bp.get("/purchases/<int:purchase_id>/edit")
+def edit_purchase_page(purchase_id):
+    return _edit_page(purchase_id, {}, None)
+
+
+@bp.post("/purchases/<int:purchase_id>/edit")
+def edit_purchase(purchase_id):
+    fields = {k: request.form[k] for k in ("quantity", "unit", "expiry", "group")
+              if k in request.form}
+    try:
+        get_stock().edit_purchase(purchase_id, **fields)
+    except NotFound:
+        return "Purchase not found", 404
+    except StockError as e:
+        return _edit_page(purchase_id, request.form, str(e))
+    return redirect(url_for("web.index"))
+
+
+@bp.post("/purchases/<int:purchase_id>/move")
+def move_purchase(purchase_id):
+    try:
+        get_stock().move_purchase(purchase_id, request.form.get("group"),
+                                  request.form.get("quantity"), request.form.get("unit"))
+    except NotFound:
+        return "Purchase not found", 404
+    except StockError as e:
+        return _edit_page(purchase_id, {}, str(e))
+    return redirect(url_for("web.index"))
+
+
+@bp.post("/purchases/<int:purchase_id>/delete")
+def delete_purchase(purchase_id):
+    try:
+        get_stock().delete_purchase(purchase_id)
+    except StockError as e:
+        return str(e), _status(e)
+    return redirect(url_for("web.index"))
