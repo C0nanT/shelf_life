@@ -2,7 +2,7 @@
 from flask import Blueprint, current_app, g, jsonify, redirect, render_template, request, url_for
 
 from . import db, units
-from .stock import GROUPS, Stock, StockError
+from .stock import GROUPS, NotFound, Stock, StockError
 
 bp = Blueprint("web", __name__)
 
@@ -163,3 +163,84 @@ def create_removal():
     except StockError as e:
         return _removal_page(request.form, str(e)), 400
     return redirect(url_for("web.history"))
+
+
+def _status(e):
+    return 404 if isinstance(e, NotFound) else 400
+
+
+@bp.post("/api/purchases/<int:purchase_id>/move")
+def api_move_purchase(purchase_id):
+    body = request.get_json(silent=True) or {}
+    try:
+        new_id = get_stock().move_purchase(
+            purchase_id, body.get("group"), body.get("quantity"), body.get("unit"))
+    except StockError as e:
+        return jsonify(error=str(e)), _status(e)
+    return jsonify(id=new_id)
+
+
+@bp.patch("/api/purchases/<int:purchase_id>")
+def api_edit_purchase(purchase_id):
+    try:
+        get_stock().edit_purchase(purchase_id, **(request.get_json(silent=True) or {}))
+    except StockError as e:
+        return jsonify(error=str(e)), _status(e)
+    return jsonify(ok=True)
+
+
+@bp.delete("/api/purchases/<int:purchase_id>")
+def api_delete_purchase(purchase_id):
+    try:
+        get_stock().delete_purchase(purchase_id)
+    except StockError as e:
+        return jsonify(error=str(e)), _status(e)
+    return jsonify(ok=True)
+
+
+def _edit_page(purchase_id, form, error):
+    try:
+        purchase = _purchase_json(get_stock().get_purchase(purchase_id))
+    except NotFound:
+        return "Purchase not found", 404
+    return render_template("edit_purchase.html", p=purchase, units=UNIT_CHOICES,
+                           groups=GROUPS, form=form, error=error), (400 if error else 200)
+
+
+@bp.get("/purchases/<int:purchase_id>/edit")
+def edit_purchase_page(purchase_id):
+    return _edit_page(purchase_id, {}, None)
+
+
+@bp.post("/purchases/<int:purchase_id>/edit")
+def edit_purchase(purchase_id):
+    fields = {k: request.form[k] for k in ("quantity", "unit", "expiry", "group")
+              if k in request.form}
+    try:
+        get_stock().edit_purchase(purchase_id, **fields)
+    except NotFound:
+        return "Purchase not found", 404
+    except StockError as e:
+        return _edit_page(purchase_id, request.form, str(e))
+    return redirect(url_for("web.index"))
+
+
+@bp.post("/purchases/<int:purchase_id>/move")
+def move_purchase(purchase_id):
+    try:
+        get_stock().move_purchase(purchase_id, request.form.get("group"),
+                                  request.form.get("quantity"), request.form.get("unit"))
+    except NotFound:
+        return "Purchase not found", 404
+    except StockError as e:
+        return _edit_page(purchase_id, {}, str(e))
+    return redirect(url_for("web.index"))
+
+
+@bp.post("/purchases/<int:purchase_id>/delete")
+def delete_purchase(purchase_id):
+    try:
+        get_stock().delete_purchase(purchase_id)
+    except StockError as e:
+        return str(e), _status(e)
+    return redirect(url_for("web.index"))

@@ -11,14 +11,24 @@
 </form>
 {% if error %}<p class="error">{{ error }}</p>{% endif %}
 <table>
-<tr><th>Food</th><th>Quantity</th><th>Expiry</th><th>Group</th></tr>
+<tr><th>Food</th><th>Quantity</th><th>Expiry</th><th>Group</th><th>Actions</th></tr>
 {% for p in purchases %}
 <tr{% if p.expired %} class="expired"{% endif %}>
   <td>{{ p.name }}</td><td>{{ p.quantity }} {{ p.unit }}</td>
   <td>{{ p.expiry_display or "" }}</td><td>{{ p.group }}</td>
+  <td>
+    <form method="post" action="{{ url_for('web.move_purchase', purchase_id=p.id) }}" style="display:inline">
+      <input type="hidden" name="group" value="{{ 'Reserve' if p.group == 'Pantry' else 'Pantry' }}">
+      <button type="submit">Move to {{ 'Reserve' if p.group == 'Pantry' else 'Pantry' }}</button>
+    </form>
+    <a href="{{ url_for('web.edit_purchase_page', purchase_id=p.id) }}">Edit</a>
+    <form method="post" action="{{ url_for('web.delete_purchase', purchase_id=p.id) }}" style="display:inline" onsubmit="return confirm('Delete this purchase? It is not recorded as used or discarded.')">
+      <button type="submit">Delete</button>
+    </form>
+  </td>
 </tr>
 {% else %}
-<tr><td colspan="4">No purchases yet.</td></tr>
+<tr><td colspan="5">No purchases yet.</td></tr>
 {% endfor %}
 </table>
 {% endblock %}
