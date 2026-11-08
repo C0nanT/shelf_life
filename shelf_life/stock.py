@@ -14,6 +14,10 @@ class StockError(ValueError):
     """A business rule was violated; the message is safe to show the user."""
 
 
+class NotFound(StockError):
+    """The requested purchase does not exist."""
+
+
 def normalize_name(name):
     return " ".join(name.split()).casefold()
 
@@ -224,6 +228,103 @@ class Stock:
                     " VALUES (?, ?, ?, ?, ?)",
                     (today, food["id"], c["id"], units.format_quantity(take), reason),
                 )
+
+    def _purchase_row(self, purchase_id):
+        row = self.conn.execute(
+            'SELECT p.id, p.food_id, p.quantity, p.expiry_date, p.expiry_precision,'
+            ' p."group", f.name, f.unit FROM purchase p JOIN food f ON f.id = p.food_id'
+            " WHERE p.id = ? AND CAST(p.quantity AS REAL) > 0",
+            (purchase_id,),
+        ).fetchone()
+        if row is None:
+            raise NotFound("Purchase not found")
+        return row
+
+    def get_purchase(self, purchase_id):
+        r = self._purchase_row(purchase_id)
+        expiry = date.fromisoformat(r["expiry_date"]) if r["expiry_date"] else None
+        return PurchaseView(
+            id=r["id"], food_id=r["food_id"], name=r["name"],
+            quantity=Decimal(r["quantity"]), unit=r["unit"], expiry=expiry,
+            expiry_precision=r["expiry_precision"], group=r["group"],
+            expired=expiry is not None and expiry < self.clock(),
+        )
+
+    def _quantity_in_food_unit(self, row, quantity, unit):
+        try:
+            qty = units.parse_quantity(quantity)
+            return units.convert(qty, unit or row["unit"], row["unit"])
+        except units.UnitError as e:
+            raise StockError(str(e)) from None
+
+    def move_purchase(self, purchase_id, group, quantity=None, unit=None):
+        """Move a whole purchase, or part of it, to another group.
+
+        Not a removal: no history line. Moving the whole purchase clears its
+        warned milestone; moving part leaves the original alone and creates an
+        unwarned purchase with the same expiry.
+        """
+        if group not in GROUPS:
+            raise StockError("Group must be Pantry or Reserve")
+        with self.conn:
+            row = self._purchase_row(purchase_id)
+            if row["group"] == group:
+                raise StockError(f"Purchase is already in {group}")
+            have = Decimal(row["quantity"])
+            if quantity in (None, ""):
+                qty = have
+            else:
+                qty = self._quantity_in_food_unit(row, quantity, unit)
+            if qty > have:
+                raise StockError(f"Not enough {row['name']} in this purchase")
+            if qty == have:
+                self.conn.execute(
+                    'UPDATE purchase SET "group" = ?, last_warned_milestone = NULL'
+                    " WHERE id = ?", (group, purchase_id))
+                return purchase_id
+            self.conn.execute("UPDATE purchase SET quantity = ? WHERE id = ?",
+                              (units.format_quantity(have - qty), purchase_id))
+            cur = self.conn.execute(
+                'INSERT INTO purchase (food_id, quantity, expiry_date, expiry_precision,'
+                ' "group", recorded_date) VALUES (?, ?, ?, ?, ?, ?)',
+                (row["food_id"], units.format_quantity(qty), row["expiry_date"],
+                 row["expiry_precision"], group, self.clock().isoformat()))
+            return cur.lastrowid
+
+    def edit_purchase(self, purchase_id, **fields):
+        """Correct quantity, unit (same family), expiry, or group; no removal is recorded.
+
+        Only the keys given are changed. A changed expiry or group clears the
+        warned milestone.
+        """
+        if set(fields) - {"quantity", "unit", "expiry", "group"}:
+            raise StockError("Unknown field")
+        with self.conn:
+            row = self._purchase_row(purchase_id)
+            qty = Decimal(row["quantity"])
+            if fields.get("quantity") not in (None, ""):
+                qty = self._quantity_in_food_unit(row, fields["quantity"], fields.get("unit"))
+            elif fields.get("unit"):
+                self._quantity_in_food_unit(row, "1", fields["unit"])
+            expiry_date, precision = row["expiry_date"], row["expiry_precision"]
+            if "expiry" in fields:
+                parsed, precision = parse_expiry(fields["expiry"])
+                expiry_date = parsed.isoformat() if parsed else None
+            group = fields.get("group") or row["group"]
+            if group not in GROUPS:
+                raise StockError("Group must be Pantry or Reserve")
+            changed = expiry_date != row["expiry_date"] or group != row["group"]
+            self.conn.execute(
+                'UPDATE purchase SET quantity = ?, expiry_date = ?, expiry_precision = ?,'
+                ' "group" = ?' + (", last_warned_milestone = NULL" if changed else "") +
+                " WHERE id = ?",
+                (units.format_quantity(qty), expiry_date, precision, group, purchase_id))
+
+    def delete_purchase(self, purchase_id):
+        """Delete a purchase recorded by mistake. History lines are kept."""
+        with self.conn:
+            self._purchase_row(purchase_id)
+            self.conn.execute("DELETE FROM purchase WHERE id = ?", (purchase_id,))
 
     def list_removals(self):
         rows = self.conn.execute(
