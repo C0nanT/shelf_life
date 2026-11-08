@@ -26,6 +26,11 @@ Both use `restart: unless-stopped`, so they come back when Docker starts at boot
     docker compose exec scheduler shelf-life-scheduler --once   # run the routine now
     docker compose up -d --build              # after pulling new code
 
+To check the Telegram configuration, send a test message (it always sends, unlike the routine, which only sends when a milestone is due):
+
+    docker compose run --rm --no-deps scheduler python -c \
+        "from shelf_life.telegram import TelegramSender; TelegramSender.from_env().send('Stock: test message from Shelf Life')"
+
 ### Where the data lives
 
 - **Database**: `/data/shelf_life.db` inside the named Docker volume `shelf_life_data`. It survives `docker compose down`, rebuilds and recreated containers. Only `docker compose down -v` (or `docker volume rm shelf_life_data`) deletes it.
