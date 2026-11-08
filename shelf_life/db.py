@@ -18,6 +18,15 @@ CREATE TABLE IF NOT EXISTS purchase (
     recorded_date TEXT NOT NULL,
     last_warned_milestone INTEGER
 );
+-- purchase_id is deliberately not a foreign key: history outlives purchases.
+CREATE TABLE IF NOT EXISTS removal (
+    id INTEGER PRIMARY KEY,
+    removed_date TEXT NOT NULL,
+    food_id INTEGER NOT NULL REFERENCES food(id),
+    purchase_id INTEGER NOT NULL,
+    quantity TEXT NOT NULL,            -- in the food's unit
+    reason TEXT NOT NULL CHECK (reason IN ('used', 'discarded'))
+);
 """
 
 
