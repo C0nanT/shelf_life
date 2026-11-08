@@ -103,6 +103,13 @@ class MoveAndCorrectTests(ApiTestCase):
         self.assertEqual(self.rows(), [("Pantry", "0.5", None)])
         self.assertEqual(self.edit(pid, quantity="1", unit="L").status_code, 400)
 
+    def test_edit_unit_alone_is_rejected_with_clear_message(self):
+        pid = self.buy("Rice", "2", "kg").get_json()["id"]
+        r = self.edit(pid, unit="g")
+        self.assertEqual(r.status_code, 400)
+        self.assertIn("quantity", r.get_json()["error"])
+        self.assertEqual(self.rows(), [("Pantry", "2", None)])
+
     def test_edit_can_clear_expiry_and_change_group(self):
         pid = self.buy("Rice", "2", "kg", "2027-01-01").get_json()["id"]
         self.edit(pid, expiry="", group="Reserve")

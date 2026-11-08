@@ -16,6 +16,13 @@ class FoodsTests(ApiTestCase):
     def foods(self):
         return self.client.get("/api/foods/all").get_json()
 
+    def test_foods_report_purchase_count(self):
+        self.buy("Rice")
+        self.buy("Rice")
+        self.buy("Beans")
+        self.assertEqual({f["name"]: f["purchase_count"] for f in self.foods()},
+                         {"Rice": 2, "Beans": 1})
+
     def food_id(self, name):
         return next(f["id"] for f in self.foods() if f["name"] == name)
 

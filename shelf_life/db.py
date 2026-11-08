@@ -27,6 +27,9 @@ CREATE TABLE IF NOT EXISTS removal (
     quantity TEXT NOT NULL,            -- in the food's unit
     reason TEXT NOT NULL CHECK (reason IN ('used', 'discarded'))
 );
+CREATE INDEX IF NOT EXISTS idx_purchase_food ON purchase(food_id);
+CREATE INDEX IF NOT EXISTS idx_purchase_expiry ON purchase(expiry_date);
+CREATE INDEX IF NOT EXISTS idx_removal_food ON removal(food_id);
 """
 
 

@@ -18,9 +18,10 @@
   <td>{{ p.expiry_display or "" }}</td><td>{{ p.group }}</td>
   <td>
     <form method="post" action="{{ url_for('web.move_purchase', purchase_id=p.id) }}" style="display:inline">
-      <input type="hidden" name="group" value="{{ 'Reserve' if p.group == 'Pantry' else 'Pantry' }}">
-      <button type="submit">Move to {{ 'Reserve' if p.group == 'Pantry' else 'Pantry' }}</button>
+      <input type="hidden" name="group" value="{{ p.other_group }}">
+      <button type="submit">Move to {{ p.other_group }}</button>
     </form>
+    <a href="{{ url_for('web.new_removal', purchase_id=p.id, name=p.name, unit=p.unit) }}">Remove</a>
     <a href="{{ url_for('web.edit_purchase_page', purchase_id=p.id) }}">Edit</a>
     <form method="post" action="{{ url_for('web.delete_purchase', purchase_id=p.id) }}" style="display:inline" onsubmit="return confirm('Delete this purchase? It is not recorded as used or discarded.')">
       <button type="submit">Delete</button>
