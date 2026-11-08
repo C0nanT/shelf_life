@@ -18,6 +18,10 @@ class NotFound(StockError):
     """The requested purchase does not exist."""
 
 
+class NeedsConfirmation(StockError):
+    """The action would merge two foods and must be confirmed first."""
+
+
 def normalize_name(name):
     return " ".join(name.split()).casefold()
 
@@ -334,3 +338,104 @@ class Stock:
         return [{"date": r["removed_date"], "food": r["name"],
                  "quantity": r["quantity"], "unit": r["unit"], "reason": r["reason"]}
                 for r in rows]
+
+    # foods
+    def list_foods(self):
+        rows = self.conn.execute(
+            "SELECT f.id, f.name, f.unit, f.warning_milestones,"
+            " (SELECT COUNT(*) FROM purchase p WHERE p.food_id = f.id) AS purchases"
+            " FROM food f ORDER BY f.normalized_name"
+        ).fetchall()
+        return [{"id": r["id"], "name": r["name"], "unit": r["unit"],
+                 "milestones": r["warning_milestones"] or "",
+                 "purchases": r["purchases"]} for r in rows]
+
+    def update_food(self, food_id, name=None, unit=None, milestones=None,
+                    confirm_merge=False):
+        """Rename, change unit, or set exception milestones (any key may be omitted).
+
+        Renaming to another food's name needs `confirm_merge`; the food is then
+        merged into the destination, whose milestones win.
+        """
+        with self.conn:
+            food = self.conn.execute(
+                "SELECT * FROM food WHERE id = ?", (food_id,)).fetchone()
+            if food is None:
+                raise NotFound("Food not found")
+            display = " ".join(name.split()) if name is not None else food["name"]
+            if not display:
+                raise StockError("Name is required")
+            unit = unit or food["unit"]
+            try:
+                units.family(unit)
+            except units.UnitError as e:
+                raise StockError(str(e)) from None
+            target = self.conn.execute(
+                "SELECT * FROM food WHERE normalized_name = ? AND id != ?",
+                (normalize_name(display), food_id)).fetchone()
+            if target is not None:
+                return self._merge_foods(food, target, confirm_merge)
+            if unit != food["unit"]:
+                self._change_unit(food, unit)
+            new_milestones = food["warning_milestones"]
+            if milestones is not None:
+                new_milestones = self._parse_milestones(milestones)
+            self.conn.execute(
+                "UPDATE food SET name = ?, normalized_name = ?, unit = ?,"
+                " warning_milestones = ? WHERE id = ?",
+                (display, normalize_name(display), unit, new_milestones, food_id))
+            if new_milestones != food["warning_milestones"]:
+                self.conn.execute(
+                    "UPDATE purchase SET last_warned_milestone = NULL WHERE food_id = ?",
+                    (food_id,))
+
+    @staticmethod
+    def _parse_milestones(value):
+        if isinstance(value, (list, tuple)):
+            value = ",".join(str(v) for v in value)
+        try:
+            numbers = {int(p) for p in str(value).split(",") if p.strip()}
+        except ValueError:
+            raise StockError("Milestones must be whole numbers like 30,7,0") from None
+        if any(n < 0 for n in numbers):
+            raise StockError("Milestones cannot be negative")
+        return ",".join(str(n) for n in sorted(numbers, reverse=True)) or None
+
+    def _rescale(self, food_id, from_unit, to_unit):
+        """Re-express a food's stored quantities in another unit of the same family."""
+        for table in ("purchase", "removal"):
+            for r in self.conn.execute(
+                    f"SELECT id, quantity FROM {table} WHERE food_id = ?",
+                    (food_id,)).fetchall():
+                new = units.convert(Decimal(r["quantity"]), from_unit, to_unit)
+                self.conn.execute(f"UPDATE {table} SET quantity = ? WHERE id = ?",
+                                  (units.format_quantity(new), r["id"]))
+
+    def _change_unit(self, food, unit):
+        if units.family(unit) != units.family(food["unit"]):
+            used = self.conn.execute(
+                "SELECT (SELECT COUNT(*) FROM purchase WHERE food_id = ?)"
+                " + (SELECT COUNT(*) FROM removal WHERE food_id = ?)",
+                (food["id"], food["id"])).fetchone()[0]
+            if used:
+                raise StockError(
+                    f"{food['name']} has recorded purchases; "
+                    "its unit family cannot change")
+            return
+        self._rescale(food["id"], food["unit"], unit)
+
+    def _merge_foods(self, source, target, confirm_merge):
+        if units.family(source["unit"]) != units.family(target["unit"]):
+            raise StockError(
+                f"Cannot merge {source['name']} ({source['unit']}) into "
+                f"{target['name']} ({target['unit']}): different unit families")
+        if not confirm_merge:
+            raise NeedsConfirmation(
+                f"{target['name']} already exists. Merge {source['name']} into it?")
+        self._rescale(source["id"], source["unit"], target["unit"])
+        self.conn.execute(
+            "UPDATE purchase SET food_id = ?, last_warned_milestone = NULL"
+            " WHERE food_id = ?", (target["id"], source["id"]))
+        self.conn.execute("UPDATE removal SET food_id = ? WHERE food_id = ?",
+                          (target["id"], source["id"]))
+        self.conn.execute("DELETE FROM food WHERE id = ?", (source["id"],))
