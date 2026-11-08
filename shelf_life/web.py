@@ -2,7 +2,7 @@
 from flask import Blueprint, current_app, g, jsonify, redirect, render_template, request, url_for
 
 from . import db, units
-from .stock import GROUPS, NotFound, Stock, StockError
+from .stock import GROUPS, NeedsConfirmation, NotFound, Stock, StockError
 
 bp = Blueprint("web", __name__)
 
@@ -166,7 +166,57 @@ def create_removal():
 
 
 def _status(e):
-    return 404 if isinstance(e, NotFound) else 400
+    if isinstance(e, NotFound):
+        return 404
+    return 409 if isinstance(e, NeedsConfirmation) else 400
+
+
+FOOD_FIELDS = ("name", "unit", "milestones")
+
+
+@bp.get("/api/foods/all")
+def api_list_foods():
+    return jsonify(get_stock().list_foods())
+
+
+@bp.patch("/api/foods/<int:food_id>")
+def api_update_food(food_id):
+    body = request.get_json(silent=True) or {}
+    try:
+        get_stock().update_food(
+            food_id, confirm_merge=bool(body.get("confirm_merge")),
+            **{k: body[k] for k in FOOD_FIELDS if k in body})
+    except StockError as e:
+        return jsonify(error=str(e),
+                       needs_confirmation=isinstance(e, NeedsConfirmation)), _status(e)
+    return jsonify(ok=True)
+
+
+def _foods_page(error=None, confirm=None, form=None, status=200):
+    return render_template("foods.html", foods=get_stock().list_foods(),
+                           units=UNIT_CHOICES, error=error, confirm=confirm,
+                           form=form or {}), status
+
+
+@bp.get("/foods")
+def foods_page():
+    return _foods_page()
+
+
+@bp.post("/foods/<int:food_id>")
+def update_food(food_id):
+    fields = {k: request.form[k] for k in FOOD_FIELDS if k in request.form}
+    try:
+        get_stock().update_food(food_id, confirm_merge="confirm_merge" in request.form,
+                                **fields)
+    except NeedsConfirmation as e:
+        return _foods_page(confirm={"id": food_id, "message": str(e)},
+                           form=request.form, status=409)
+    except NotFound:
+        return "Food not found", 404
+    except StockError as e:
+        return _foods_page(error=str(e), status=400)
+    return redirect(url_for("web.foods_page"))
 
 
 @bp.post("/api/purchases/<int:purchase_id>/move")
