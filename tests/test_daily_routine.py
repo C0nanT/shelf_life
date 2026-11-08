@@ -1,4 +1,5 @@
 import os
+import tempfile
 from datetime import timedelta
 from unittest import mock
 
@@ -15,6 +16,17 @@ class FakeSender:
         if self.fail:
             raise RuntimeError("telegram down")
         self.messages.append(text)
+
+
+class MainWithoutTelegramTests(ApiTestCase):
+    def test_backup_still_runs_and_exit_is_nonzero_without_telegram_env(self):
+        with tempfile.TemporaryDirectory() as backup_dir:
+            env = {"SHELF_LIFE_DB": self.db_path, "SHELF_LIFE_BACKUP_DIR": backup_dir}
+            with mock.patch.dict(os.environ, env, clear=True):
+                with self.assertRaises(SystemExit) as cm:
+                    daily_routine.main()
+            self.assertNotEqual(cm.exception.code, 0)
+            self.assertTrue(os.listdir(backup_dir))
 
 
 class DailyRoutineTests(ApiTestCase):

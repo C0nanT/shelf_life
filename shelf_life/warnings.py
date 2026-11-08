@@ -28,10 +28,20 @@ class Warning:
     milestone: int
 
 
-def parse_milestones(text):
-    """Parse a food's exception milestones, e.g. '30,7,0'; blank means none."""
-    pieces = [p.strip() for p in (text or "").split(",") if p.strip()]
-    return tuple(int(p) for p in pieces) or None
+def parse_milestones(value):
+    """Parse milestones from '30,7,0' or a list: a tuple, largest first.
+
+    Blank means none (None). Raises ValueError with a user-safe message.
+    """
+    if isinstance(value, (list, tuple)):
+        value = ",".join(str(v) for v in value)
+    try:
+        numbers = {int(p) for p in (value or "").split(",") if p.strip()}
+    except ValueError:
+        raise ValueError("Milestones must be whole numbers like 30,7,0") from None
+    if any(n < 0 for n in numbers):
+        raise ValueError("Milestones cannot be negative")
+    return tuple(sorted(numbers, reverse=True)) or None
 
 
 def current_milestone(days_left, milestones):

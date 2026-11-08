@@ -98,3 +98,11 @@ class RemovalTests(ApiTestCase):
         html = self.client.get("/history").get_data(as_text=True)
         self.assertIn("Rice", html)
         self.assertIn("used", html)
+
+    def test_main_list_row_links_to_prefilled_removal_form(self):
+        pid = self.buy("Rice", "1", "kg").get_json()["id"]
+        html = self.client.get("/").get_data(as_text=True)
+        link = f"/removals/new?purchase_id={pid}"
+        self.assertIn(link, html)
+        form = self.client.get(f"/removals/new?purchase_id={pid}&name=Rice&unit=kg")
+        self.assertIn('value="Rice"', form.get_data(as_text=True))

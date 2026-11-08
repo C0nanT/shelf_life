@@ -82,6 +82,10 @@ def api_suggest_foods():
     return jsonify(get_stock().suggest_foods(request.args.get("q", "")))
 
 
+def _other_group(group):
+    return "Reserve" if group == "Pantry" else "Pantry"
+
+
 @bp.get("/")
 def index():
     group, search = request.args.get("group", ""), request.args.get("q", "")
@@ -90,7 +94,8 @@ def index():
         error = None
     except StockError as e:
         found, error = [], str(e)
-    return render_template("index.html", purchases=[_purchase_json(p) for p in found],
+    purchases = [dict(_purchase_json(p), other_group=_other_group(p.group)) for p in found]
+    return render_template("index.html", purchases=purchases,
                            groups=GROUPS, group=group, search=search, error=error)
 
 

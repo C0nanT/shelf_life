@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import date
 from decimal import Decimal
 
-from . import units
+from . import units, warnings
 
 GROUPS = ("Pantry", "Reserve")
 REASONS = ("used", "discarded")
@@ -20,6 +20,11 @@ class NotFound(StockError):
 
 class NeedsConfirmation(StockError):
     """The action would merge two foods and must be confirmed first."""
+
+
+def check_group(group):
+    if group not in GROUPS:
+        raise StockError("Group must be Pantry or Reserve")
 
 
 def normalize_name(name):
@@ -75,8 +80,7 @@ class Stock:
         display_name = " ".join((name or "").split())
         if not display_name:
             raise StockError("Name is required")
-        if group not in GROUPS:
-            raise StockError("Group must be Pantry or Reserve")
+        check_group(group)
         try:
             qty = units.parse_quantity(quantity)
             units.family(unit)
@@ -104,14 +108,17 @@ class Stock:
                     f"{display_name} is tracked in {food_unit}; "
                     f"{unit} is a different unit family"
                 ) from None
-            cur = self.conn.execute(
-                'INSERT INTO purchase (food_id, quantity, expiry_date, expiry_precision,'
-                ' "group", recorded_date) VALUES (?, ?, ?, ?, ?, ?)',
-                (food_id, units.format_quantity(qty),
-                 expiry_date.isoformat() if expiry_date else None, precision,
-                 group, self.clock().isoformat()),
-            )
-            return cur.lastrowid
+            return self._insert_purchase(
+                food_id, qty, expiry_date.isoformat() if expiry_date else None,
+                precision, group)
+
+    def _insert_purchase(self, food_id, qty, expiry_iso, precision, group):
+        cur = self.conn.execute(
+            'INSERT INTO purchase (food_id, quantity, expiry_date, expiry_precision,'
+            ' "group", recorded_date) VALUES (?, ?, ?, ?, ?, ?)',
+            (food_id, units.format_quantity(qty), expiry_iso, precision,
+             group, self.clock().isoformat()))
+        return cur.lastrowid
 
     def suggest_foods(self, text):
         """Foods whose name contains the text (case-insensitive), with their unit."""
@@ -128,23 +135,24 @@ class Stock:
         Optionally limited to one group and to names containing `search`
         (case-insensitive).
         """
-        if group and group not in GROUPS:
-            raise StockError("Group must be Pantry or Reserve")
+        if group:
+            check_group(group)
         needle = normalize_name(search or "")
         today = self.clock()
+        sql = ('SELECT p.id, p.food_id, f.name, p.quantity, f.unit, p.expiry_date,'
+               ' p.expiry_precision, p."group" FROM purchase p JOIN food f ON f.id = p.food_id'
+               " WHERE CAST(p.quantity AS REAL) > 0")
+        args = []
+        if group:
+            sql += ' AND p."group" = ?'
+            args.append(group)
+        if needle:
+            sql += " AND instr(f.normalized_name, ?) > 0"
+            args.append(needle)
         rows = self.conn.execute(
-            'SELECT p.id, p.food_id, f.name, p.quantity, f.unit, p.expiry_date,'
-            ' p.expiry_precision, p."group" FROM purchase p JOIN food f ON f.id = p.food_id'
-            " ORDER BY p.expiry_date IS NULL, p.expiry_date, p.id"
-        ).fetchall()
+            sql + " ORDER BY p.expiry_date IS NULL, p.expiry_date, p.id", args).fetchall()
         result = []
         for r in rows:
-            if Decimal(r["quantity"]) <= 0:
-                continue
-            if group and r["group"] != group:
-                continue
-            if needle and needle not in normalize_name(r["name"]):
-                continue
             expiry = date.fromisoformat(r["expiry_date"]) if r["expiry_date"] else None
             result.append(PurchaseView(
                 id=r["id"], food_id=r["food_id"], name=r["name"],
@@ -268,8 +276,7 @@ class Stock:
         warned milestone; moving part leaves the original alone and creates an
         unwarned purchase with the same expiry.
         """
-        if group not in GROUPS:
-            raise StockError("Group must be Pantry or Reserve")
+        check_group(group)
         with self.conn:
             row = self._purchase_row(purchase_id)
             if row["group"] == group:
@@ -288,12 +295,8 @@ class Stock:
                 return purchase_id
             self.conn.execute("UPDATE purchase SET quantity = ? WHERE id = ?",
                               (units.format_quantity(have - qty), purchase_id))
-            cur = self.conn.execute(
-                'INSERT INTO purchase (food_id, quantity, expiry_date, expiry_precision,'
-                ' "group", recorded_date) VALUES (?, ?, ?, ?, ?, ?)',
-                (row["food_id"], units.format_quantity(qty), row["expiry_date"],
-                 row["expiry_precision"], group, self.clock().isoformat()))
-            return cur.lastrowid
+            return self._insert_purchase(row["food_id"], qty, row["expiry_date"],
+                                         row["expiry_precision"], group)
 
     def edit_purchase(self, purchase_id, **fields):
         """Correct quantity, unit (same family), expiry, or group; no removal is recorded.
@@ -309,14 +312,13 @@ class Stock:
             if fields.get("quantity") not in (None, ""):
                 qty = self._quantity_in_food_unit(row, fields["quantity"], fields.get("unit"))
             elif fields.get("unit"):
-                self._quantity_in_food_unit(row, "1", fields["unit"])
+                raise StockError("Changing the unit needs a quantity in the new unit")
             expiry_date, precision = row["expiry_date"], row["expiry_precision"]
             if "expiry" in fields:
                 parsed, precision = parse_expiry(fields["expiry"])
                 expiry_date = parsed.isoformat() if parsed else None
             group = fields.get("group") or row["group"]
-            if group not in GROUPS:
-                raise StockError("Group must be Pantry or Reserve")
+            check_group(group)
             changed = expiry_date != row["expiry_date"] or group != row["group"]
             self.conn.execute(
                 'UPDATE purchase SET quantity = ?, expiry_date = ?, expiry_precision = ?,'
@@ -343,12 +345,13 @@ class Stock:
     def list_foods(self):
         rows = self.conn.execute(
             "SELECT f.id, f.name, f.unit, f.warning_milestones,"
-            " (SELECT COUNT(*) FROM purchase p WHERE p.food_id = f.id) AS purchases"
-            " FROM food f ORDER BY f.normalized_name"
+            " COALESCE(c.n, 0) AS purchase_count FROM food f"
+            " LEFT JOIN (SELECT food_id, COUNT(*) AS n FROM purchase GROUP BY food_id) c"
+            " ON c.food_id = f.id ORDER BY f.normalized_name"
         ).fetchall()
         return [{"id": r["id"], "name": r["name"], "unit": r["unit"],
                  "milestones": r["warning_milestones"] or "",
-                 "purchases": r["purchases"]} for r in rows]
+                 "purchase_count": r["purchase_count"]} for r in rows]
 
     def update_food(self, food_id, name=None, unit=None, milestones=None,
                     confirm_merge=False):
@@ -391,25 +394,23 @@ class Stock:
 
     @staticmethod
     def _parse_milestones(value):
-        if isinstance(value, (list, tuple)):
-            value = ",".join(str(v) for v in value)
         try:
-            numbers = {int(p) for p in str(value).split(",") if p.strip()}
-        except ValueError:
-            raise StockError("Milestones must be whole numbers like 30,7,0") from None
-        if any(n < 0 for n in numbers):
-            raise StockError("Milestones cannot be negative")
-        return ",".join(str(n) for n in sorted(numbers, reverse=True)) or None
+            parsed = warnings.parse_milestones(value)
+        except ValueError as e:
+            raise StockError(str(e)) from None
+        return ",".join(str(n) for n in parsed) if parsed else None
 
     def _rescale(self, food_id, from_unit, to_unit):
         """Re-express a food's stored quantities in another unit of the same family."""
         for table in ("purchase", "removal"):
-            for r in self.conn.execute(
-                    f"SELECT id, quantity FROM {table} WHERE food_id = ?",
-                    (food_id,)).fetchall():
-                new = units.convert(Decimal(r["quantity"]), from_unit, to_unit)
-                self.conn.execute(f"UPDATE {table} SET quantity = ? WHERE id = ?",
-                                  (units.format_quantity(new), r["id"]))
+            rows = self.conn.execute(
+                f"SELECT id, quantity FROM {table} WHERE food_id = ?",
+                (food_id,)).fetchall()
+            self.conn.executemany(
+                f"UPDATE {table} SET quantity = ? WHERE id = ?",
+                [(units.format_quantity(
+                    units.convert(Decimal(r["quantity"]), from_unit, to_unit)), r["id"])
+                  for r in rows])
 
     def _change_unit(self, food, unit):
         if units.family(unit) != units.family(food["unit"]):
