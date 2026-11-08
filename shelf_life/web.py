@@ -48,15 +48,45 @@ def api_record_purchase():
     return jsonify(id=purchase_id), 201
 
 
+def _totals_json(totals):
+    return [{
+        "name": t["name"], "unit": t["unit"],
+        "total": units.format_quantity(t["total"]),
+        "by_group": {g: units.format_quantity(q) for g, q in t["by_group"].items()},
+    } for t in totals]
+
+
 @bp.get("/api/purchases")
 def api_list_purchases():
-    return jsonify([_purchase_json(p) for p in get_stock().list_purchases()])
+    try:
+        purchases = get_stock().list_purchases(
+            request.args.get("group"), request.args.get("q"))
+    except StockError as e:
+        return jsonify(error=str(e)), 400
+    return jsonify([_purchase_json(p) for p in purchases])
+
+
+@bp.get("/api/totals")
+def api_totals():
+    return jsonify(_totals_json(get_stock().totals()))
+
+
+@bp.get("/totals")
+def totals_page():
+    return render_template("totals.html", totals=_totals_json(get_stock().totals()),
+                           groups=GROUPS)
 
 
 @bp.get("/")
 def index():
-    purchases = [_purchase_json(p) for p in get_stock().list_purchases()]
-    return render_template("index.html", purchases=purchases)
+    group, search = request.args.get("group", ""), request.args.get("q", "")
+    try:
+        found = get_stock().list_purchases(group, search)
+        error = None
+    except StockError as e:
+        found, error = [], str(e)
+    return render_template("index.html", purchases=[_purchase_json(p) for p in found],
+                           groups=GROUPS, group=group, search=search, error=error)
 
 
 @bp.get("/purchases/new")
