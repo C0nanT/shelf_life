@@ -9,7 +9,8 @@ from . import db
 def create_app(config=None):
     app = Flask(__name__, instance_relative_config=True)
     app.config.update(
-        DATABASE=os.path.join(app.instance_path, "shelf_life.db"),
+        DATABASE=os.environ.get("SHELF_LIFE_DB")
+        or os.path.join(app.instance_path, "shelf_life.db"),
         CLOCK=date.today,
     )
     if config:
