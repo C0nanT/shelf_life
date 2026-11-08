@@ -1,0 +1,17 @@
+# Local development: compose merges this file automatically, so a plain
+# `docker compose up -d` runs the page with hot reload. Python and template
+# edits in ./shelf_life apply in about a second, with no rebuild.
+# To run the production setup (gunicorn, code baked into the image) instead:
+#   docker compose -f docker-compose.yml up -d --build
+
+services:
+  web:
+    # Flask's reloader; the interactive debugger stays off (no remote code
+    # execution page). FLASK_DEBUG also turns on template auto-reload.
+    command: ["flask", "--app", "shelf_life", "run", "--host", "0.0.0.0", "--port", "8000", "--debug", "--no-debugger"]
+    volumes:
+      - ./shelf_life:/app/shelf_life:ro
+  scheduler:
+    # Same code as the page, so the daily routine also uses the edited files.
+    volumes:
+      - ./shelf_life:/app/shelf_life:ro
