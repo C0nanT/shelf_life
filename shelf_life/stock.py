@@ -105,6 +105,15 @@ class Stock:
             )
             return cur.lastrowid
 
+    def suggest_foods(self, text):
+        """Foods whose name contains the text (case-insensitive), with their unit."""
+        needle = normalize_name(text or "")
+        rows = self.conn.execute(
+            "SELECT name, normalized_name, unit FROM food ORDER BY normalized_name"
+        ).fetchall()
+        return [{"name": r["name"], "unit": r["unit"]}
+                for r in rows if needle in r["normalized_name"]]
+
     def list_purchases(self):
         """Purchases by nearest expiry (expired ones sort first); no expiry last."""
         today = self.clock()
