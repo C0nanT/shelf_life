@@ -53,6 +53,11 @@ def api_list_purchases():
     return jsonify([_purchase_json(p) for p in get_stock().list_purchases()])
 
 
+@bp.get("/api/foods")
+def api_suggest_foods():
+    return jsonify(get_stock().suggest_foods(request.args.get("q", "")))
+
+
 @bp.get("/")
 def index():
     purchases = [_purchase_json(p) for p in get_stock().list_purchases()]
@@ -62,7 +67,8 @@ def index():
 @bp.get("/purchases/new")
 def new_purchase():
     return render_template("new_purchase.html", units=UNIT_CHOICES, groups=GROUPS,
-                           form={}, error=None)
+                           form={"group": request.args.get("group", "")}, error=None,
+                           added=request.args.get("added"))
 
 
 @bp.post("/purchases")
@@ -71,5 +77,8 @@ def create_purchase():
         _record(request.form)
     except StockError as e:
         return render_template("new_purchase.html", units=UNIT_CHOICES, groups=GROUPS,
-                               form=request.form, error=str(e)), 400
+                               form=request.form, error=str(e), added=None), 400
+    if "again" in request.form:
+        return redirect(url_for("web.new_purchase", added=request.form.get("name", "").strip(),
+                                group=request.form.get("group", "")))
     return redirect(url_for("web.index"))
