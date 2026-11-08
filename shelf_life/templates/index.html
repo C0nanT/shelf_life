@@ -1,6 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
 <h1>Stock</h1>
+<form method="get" action="{{ url_for('web.index') }}">
+  <select name="group">
+    <option value="">All groups</option>
+    {% for g in groups %}<option value="{{ g }}"{% if g == group %} selected{% endif %}>{{ g }}</option>{% endfor %}
+  </select>
+  <input type="search" name="q" value="{{ search }}" placeholder="Search by name">
+  <button type="submit">Filter</button>
+</form>
+{% if error %}<p class="error">{{ error }}</p>{% endif %}
 <table>
 <tr><th>Food</th><th>Quantity</th><th>Expiry</th><th>Group</th></tr>
 {% for p in purchases %}

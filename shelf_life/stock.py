@@ -113,8 +113,15 @@ class Stock:
         return [{"name": r["name"], "unit": r["unit"]}
                 for r in rows if needle in r["normalized_name"]]
 
-    def list_purchases(self):
-        """Purchases by nearest expiry (expired ones sort first); no expiry last."""
+    def list_purchases(self, group=None, search=None):
+        """Purchases by nearest expiry (expired ones sort first); no expiry last.
+
+        Optionally limited to one group and to names containing `search`
+        (case-insensitive).
+        """
+        if group and group not in GROUPS:
+            raise StockError("Group must be Pantry or Reserve")
+        needle = normalize_name(search or "")
         today = self.clock()
         rows = self.conn.execute(
             'SELECT p.id, p.food_id, f.name, p.quantity, f.unit, p.expiry_date,'
@@ -123,6 +130,10 @@ class Stock:
         ).fetchall()
         result = []
         for r in rows:
+            if group and r["group"] != group:
+                continue
+            if needle and needle not in normalize_name(r["name"]):
+                continue
             expiry = date.fromisoformat(r["expiry_date"]) if r["expiry_date"] else None
             result.append(PurchaseView(
                 id=r["id"], food_id=r["food_id"], name=r["name"],
@@ -131,3 +142,15 @@ class Stock:
                 expired=expiry is not None and expiry < today,
             ))
         return result
+
+    def totals(self):
+        """Total per food in the food's unit, with the split by group."""
+        totals = {}
+        for p in self.list_purchases():
+            entry = totals.setdefault(p.food_id, {
+                "name": p.name, "unit": p.unit, "total": Decimal(0),
+                "by_group": {g: Decimal(0) for g in GROUPS},
+            })
+            entry["total"] += p.quantity
+            entry["by_group"][p.group] += p.quantity
+        return sorted(totals.values(), key=lambda e: normalize_name(e["name"]))

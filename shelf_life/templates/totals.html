@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<h1>Totals</h1>
+<table>
+<tr><th>Food</th><th>Total</th>{% for g in groups %}<th>{{ g }}</th>{% endfor %}</tr>
+{% for t in totals %}
+<tr>
+  <td>{{ t.name }}</td><td>{{ t.total }} {{ t.unit }}</td>
+  {% for g in groups %}<td>{{ t.by_group[g] }} {{ t.unit }}</td>{% endfor %}
+</tr>
+{% else %}
+<tr><td colspan="{{ 2 + groups|length }}">No purchases yet.</td></tr>
+{% endfor %}
+</table>
+{% endblock %}
