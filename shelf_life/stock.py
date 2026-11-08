@@ -32,22 +32,31 @@ def normalize_name(name):
 
 
 def parse_expiry(text):
-    """Return (date, precision) from 'YYYY-MM-DD', 'YYYY-MM', or blank."""
+    """Return (date, precision) from 'DD/MM/YYYY', 'MM/YYYY', ISO forms, or blank."""
     text = (text or "").strip()
     if not text:
         return None, None
-    pieces = text.split("-")
     try:
-        if len(pieces[0]) == 4:
-            numbers = [int(p) for p in pieces]
+        if "/" in text:
+            numbers = [int(p) for p in text.split("/")]
             if len(numbers) == 3:
-                return date(*numbers), "day"
+                day, month, year = numbers
+                return date(year, month, day), "day"
             if len(numbers) == 2:
-                year, month = numbers
+                month, year = numbers
                 return date(year, month, calendar.monthrange(year, month)[1]), "month"
+        else:
+            pieces = text.split("-")
+            if len(pieces[0]) == 4:
+                numbers = [int(p) for p in pieces]
+                if len(numbers) == 3:
+                    return date(*numbers), "day"
+                if len(numbers) == 2:
+                    year, month = numbers
+                    return date(year, month, calendar.monthrange(year, month)[1]), "month"
     except (ValueError, calendar.IllegalMonthError):
         pass
-    raise StockError("Expiry must be YYYY-MM-DD, YYYY-MM, or blank")
+    raise StockError("Expiry must be DD/MM/YYYY, MM/YYYY, or blank")
 
 
 @dataclass
@@ -61,14 +70,27 @@ class PurchaseView:
     expiry_precision: str | None
     group: str
     expired: bool
+    days_left: int | None = None
+    shelf_pct: int | None = None  # share of the shelf life still left, 0-100
+
+    @property
+    def urgency(self):
+        """Colour band for the days-left bar: expired, red, yellow or green."""
+        if self.days_left is None:
+            return None
+        if self.days_left < 0:
+            return "expired"
+        if self.days_left <= 7:
+            return "red"
+        return "yellow" if self.days_left <= 30 else "green"
 
     @property
     def expiry_display(self):
         if self.expiry is None:
             return None
         if self.expiry_precision == "month":
-            return self.expiry.strftime("%Y-%m")
-        return self.expiry.isoformat()
+            return self.expiry.strftime("%m/%Y")
+        return self.expiry.strftime("%d/%m/%Y")
 
 
 class Stock:
@@ -140,7 +162,7 @@ class Stock:
         needle = normalize_name(search or "")
         today = self.clock()
         sql = ('SELECT p.id, p.food_id, f.name, p.quantity, f.unit, p.expiry_date,'
-               ' p.expiry_precision, p."group" FROM purchase p JOIN food f ON f.id = p.food_id'
+               ' p.expiry_precision, p."group", p.recorded_date FROM purchase p JOIN food f ON f.id = p.food_id'
                " WHERE CAST(p.quantity AS REAL) > 0")
         args = []
         if group:
@@ -154,11 +176,18 @@ class Stock:
         result = []
         for r in rows:
             expiry = date.fromisoformat(r["expiry_date"]) if r["expiry_date"] else None
+            days_left = shelf_pct = None
+            if expiry is not None:
+                days_left = (expiry - today).days
+                recorded = date.fromisoformat(r["recorded_date"])
+                shelf = max((expiry - recorded).days, 1)
+                shelf_pct = 100 if days_left < 0 else min(100, round(100 * days_left / shelf))
             result.append(PurchaseView(
                 id=r["id"], food_id=r["food_id"], name=r["name"],
                 quantity=Decimal(r["quantity"]), unit=r["unit"], expiry=expiry,
                 expiry_precision=r["expiry_precision"], group=r["group"],
                 expired=expiry is not None and expiry < today,
+                days_left=days_left, shelf_pct=shelf_pct,
             ))
         return result
 

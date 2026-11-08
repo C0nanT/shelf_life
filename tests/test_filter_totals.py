@@ -32,7 +32,7 @@ class FilterAndSearchTests(ApiTestCase):
 
     def test_index_page_applies_filter(self):
         html = self.client.get("/?group=Reserve&q=rice").get_data(as_text=True)
-        self.assertIn("2027-03-01", html)
+        self.assertIn("01/03/2027", html)
         self.assertNotIn("Beans", html)
 
 

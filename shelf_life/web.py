@@ -2,6 +2,7 @@
 from flask import Blueprint, current_app, g, jsonify, redirect, render_template, request, url_for
 
 from . import db, units
+from .warnings import DEFAULT_MILESTONES
 from .stock import GROUPS, NeedsConfirmation, NotFound, Stock, StockError
 
 bp = Blueprint("web", __name__)
@@ -29,6 +30,7 @@ def _purchase_json(p):
         "quantity": units.format_quantity(p.quantity), "unit": p.unit,
         "expiry": p.expiry.isoformat() if p.expiry else None,
         "expiry_display": p.expiry_display, "group": p.group, "expired": p.expired,
+        "days_left": p.days_left, "shelf_pct": p.shelf_pct, "urgency": p.urgency,
     }
 
 
@@ -133,8 +135,12 @@ def _remove(fields):
 
 def _removal_page(form, error):
     purchases = [_purchase_json(p) for p in get_stock().list_purchases()]
+    foods = {}
+    for p in purchases:
+        foods.setdefault(p["name"], p["unit"])
     return render_template("new_removal.html", units=UNIT_CHOICES, form=form,
-                           purchases=purchases, error=error)
+                           purchases=purchases, foods=sorted(foods.items(), key=lambda f: f[0].casefold()),
+                           error=error)
 
 
 @bp.post("/api/removals")
@@ -199,8 +205,8 @@ def api_update_food(food_id):
 
 def _foods_page(error=None, confirm=None, form=None, status=200):
     return render_template("foods.html", foods=get_stock().list_foods(),
-                           units=UNIT_CHOICES, error=error, confirm=confirm,
-                           form=form or {}), status
+                           units=UNIT_CHOICES, defaults=DEFAULT_MILESTONES, error=error,
+                           confirm=confirm, form=form or {}), status
 
 
 @bp.get("/foods")

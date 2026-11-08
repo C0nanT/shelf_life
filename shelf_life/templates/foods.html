@@ -13,19 +13,24 @@
   <a href="{{ url_for('web.foods_page') }}">Cancel</a>
 </form>
 {% endif %}
+<p class="hint">Warnings are sent this many days before expiry (0 = on the day).
+  Default: {% for g, days in defaults.items() %}<strong>{{ g }}</strong> {{ days|join(", ") }}{% if not loop.last %} &middot; {% endif %}{% endfor %}.
+  Leave "Custom days" blank to use the default; a custom list replaces it in every group.</p>
 <table>
-<tr><th>Name</th><th>Unit</th><th>Warning milestones (days, e.g. 30,7,0; blank uses the group's)</th><th></th></tr>
+<tr><th>Name</th><th>Unit</th><th>Notifies (days before)</th><th>Custom days (e.g. 30,7,0)</th><th></th></tr>
 {% for f in foods %}
 <tr>
   <form method="post" action="{{ url_for('web.update_food', food_id=f.id) }}">
   <td><input name="name" value="{{ f.name }}"></td>
   <td><select name="unit">{% for u in units %}<option{% if u == f.unit %} selected{% endif %}>{{ u }}</option>{% endfor %}</select></td>
-  <td><input name="milestones" value="{{ f.milestones }}"></td>
+  <td>{% if f.milestones %}<strong>{{ f.milestones|replace(",", ", ") }}</strong> <span class="muted">(custom)</span>
+    {% else %}{% for g, days in defaults.items() %}<span class="muted">{{ g }}:</span> {{ days|join(", ") }}{% if not loop.last %}<br>{% endif %}{% endfor %}{% endif %}</td>
+  <td><input name="milestones" value="{{ f.milestones }}" placeholder="default"></td>
   <td><button type="submit">Save</button></td>
   </form>
 </tr>
 {% else %}
-<tr><td colspan="4">No foods yet.</td></tr>
+<tr><td colspan="5">No foods yet.</td></tr>
 {% endfor %}
 </table>
 {% endblock %}

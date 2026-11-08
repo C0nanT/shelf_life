@@ -8,7 +8,7 @@
   <datalist id="food-names"></datalist></p>
   <p><label>Quantity <input name="quantity" value="{{ form.get('quantity', '') }}" required></label>
   <select name="unit" id="unit">{% for u in units %}<option{% if form.get('unit') == u %} selected{% endif %}>{{ u }}</option>{% endfor %}</select></p>
-  <p><label>Expiry (YYYY-MM-DD or YYYY-MM) <input name="expiry" value="{{ form.get('expiry', '') }}"></label></p>
+  <p><label>Expiry (DD/MM/YYYY or MM/YYYY) <input name="expiry" value="{{ form.get('expiry', '') }}"></label></p>
   <p><label>Group <select name="group">{% for g in groups %}<option{% if form.get('group') == g %} selected{% endif %}>{{ g }}</option>{% endfor %}</select></label></p>
   <button type="submit">Save</button>
   <button type="submit" name="again" value="1">Save and add another</button>

@@ -95,7 +95,7 @@ class MoveAndCorrectTests(ApiTestCase):
         self.assertEqual(r.status_code, 200)
         self.assertEqual(self.rows(), [("Pantry", "3", "2027-06-30")])
         self.assertEqual(self.client.get("/api/totals").get_json()[0]["total"], "3")
-        self.assertEqual(self.list_purchases()[0]["expiry_display"], "2027-06")
+        self.assertEqual(self.list_purchases()[0]["expiry_display"], "06/2027")
 
     def test_edit_unit_same_family_converts_quantity(self):
         pid = self.buy("Rice", "2", "kg").get_json()["id"]

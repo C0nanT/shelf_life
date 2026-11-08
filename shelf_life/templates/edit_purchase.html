@@ -7,7 +7,7 @@
   <select name="unit">
     {% for u in units %}<option value="{{ u }}"{% if u == form.get('unit', p.unit) %} selected{% endif %}>{{ u }}</option>{% endfor %}
   </select></p>
-  <p><label>Expiry (YYYY-MM-DD or YYYY-MM) <input name="expiry" value="{{ form.get('expiry', p.expiry_display or '') }}"></label></p>
+  <p><label>Expiry (DD/MM/YYYY or MM/YYYY) <input name="expiry" value="{{ form.get('expiry', p.expiry_display or '') }}"></label></p>
   <p><label>Group
   <select name="group">
     {% for g in groups %}<option value="{{ g }}"{% if g == form.get('group', p.group) %} selected{% endif %}>{{ g }}</option>{% endfor %}

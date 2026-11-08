@@ -18,6 +18,15 @@ def create_app(config=None):
     os.makedirs(os.path.dirname(os.path.abspath(app.config["DATABASE"])), exist_ok=True)
     db.init_db(app.config["DATABASE"])
 
+    @app.template_filter("br_date")
+    def br_date(value):
+        """Format an ISO date string (or date) as DD/MM/YYYY."""
+        if not value:
+            return ""
+        if isinstance(value, str):
+            value = date.fromisoformat(value[:10])
+        return value.strftime("%d/%m/%Y")
+
     from . import web
     app.register_blueprint(web.bp)
     return app

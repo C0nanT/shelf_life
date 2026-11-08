@@ -4,7 +4,7 @@
 <table>
 <tr><th>Date</th><th>Food</th><th>Quantity</th><th>Reason</th></tr>
 {% for r in removals %}
-<tr><td>{{ r.date }}</td><td>{{ r.food }}</td><td>{{ r.quantity }} {{ r.unit }}</td><td>{{ r.reason }}</td></tr>
+<tr><td>{{ r.date|br_date }}</td><td>{{ r.food }}</td><td>{{ r.quantity }} {{ r.unit }}</td><td>{{ r.reason }}</td></tr>
 {% else %}
 <tr><td colspan="4">No removals yet.</td></tr>
 {% endfor %}

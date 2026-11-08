@@ -5,7 +5,7 @@ Pure logic, no network and no clock: the caller supplies the date.
 from dataclasses import dataclass
 from datetime import date
 
-DEFAULT_MILESTONES = {"Pantry": (7, 0), "Reserve": (90, 30, 7, 0)}
+DEFAULT_MILESTONES = {"Pantry": (7, 0), "Reserve": (30, 7, 0)}
 
 
 @dataclass
@@ -78,7 +78,7 @@ def build_digest(warnings):
     lines = ["Stock: expiry warnings"]
     for w in warnings:
         lines.append(f"- {w.name} ({w.group}): {describe_days(w.days_left)}"
-                     f" [{w.expiry.isoformat()}]")
+                     f" [{w.expiry.strftime("%d/%m/%Y")}]")
     return "\n".join(lines)
 
 

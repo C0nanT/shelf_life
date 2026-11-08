@@ -10,7 +10,7 @@ class RecordPurchaseTests(ApiTestCase):
         self.assertEqual(item["quantity"], "2.5")
         self.assertEqual(item["unit"], "kg")
         self.assertEqual(item["expiry"], "2027-01-15")
-        self.assertEqual(item["expiry_display"], "2027-01-15")
+        self.assertEqual(item["expiry_display"], "15/01/2027")
         self.assertEqual(item["group"], "Reserve")
         self.assertFalse(item["expired"])
 
@@ -42,7 +42,7 @@ class RecordPurchaseTests(ApiTestCase):
         self.today = self.today.replace(year=2027, month=2, day=28)
         self.buy("Pasta", "1", "kg", "2027-02")
         [item] = self.list_purchases()
-        self.assertEqual(item["expiry_display"], "2027-02")
+        self.assertEqual(item["expiry_display"], "02/2027")
         self.assertFalse(item["expired"])
         self.today = self.today.replace(month=3, day=1)
         [item] = self.list_purchases()
@@ -133,3 +133,20 @@ class PageTests(ApiTestCase):
             "name": "", "quantity": "1", "unit": "kg", "expiry": "", "group": "Pantry"})
         self.assertEqual(response.status_code, 400)
         self.assertIn("Name is required", response.get_data(as_text=True))
+
+
+class BrazilianDateTests(ApiTestCase):
+    def test_expiry_accepts_and_displays_dd_mm_yyyy(self):
+        self.buy("Beans", "1", "kg", "15/01/2027")
+        [item] = self.list_purchases()
+        self.assertEqual(item["expiry"], "2027-01-15")
+        self.assertEqual(item["expiry_display"], "15/01/2027")
+
+    def test_expiry_accepts_mm_yyyy_as_last_day_of_month(self):
+        self.buy("Flour", "1", "kg", "02/2028")
+        [item] = self.list_purchases()
+        self.assertEqual(item["expiry"], "2028-02-29")
+        self.assertEqual(item["expiry_display"], "02/2028")
+
+    def test_invalid_brazilian_date_is_rejected(self):
+        self.assertEqual(self.buy("Salt", "1", "kg", "31/02/2027").status_code, 400)

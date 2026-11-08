@@ -52,6 +52,7 @@ class DailyRoutineTests(ApiTestCase):
         self.assertIn("7 days left", text)
         self.assertIn("Beans", text)
         self.assertIn("30 days left", text)
+        self.assertIn((self.today + timedelta(days=7)).strftime("%d/%m/%Y"), text)
 
     def test_nothing_sent_without_new_milestone(self):
         self.buy("Rice", "1", "kg", self.on(20), "Pantry")
@@ -70,13 +71,13 @@ class DailyRoutineTests(ApiTestCase):
         self.assertIn("expires today", self.run_day(4).messages[0])
 
     def test_long_gap_shows_item_once_with_latest_milestone(self):
-        self.buy("Rice", "1", "kg", self.on(100), "Reserve")
-        self.assertEqual(len(self.run_day(10).messages), 1)  # 90 days left
-        sender = self.run_day(95)  # 5 days left, skipped 30 and 7
+        self.buy("Rice", "1", "kg", self.on(40), "Reserve")
+        self.assertEqual(len(self.run_day(10).messages), 1)  # 30 days left
+        sender = self.run_day(35)  # 5 days left, skipped 7
         self.assertEqual(len(sender.messages), 1)
         self.assertEqual(sender.messages[0].count("Rice"), 1)
         self.assertIn("5 days left", sender.messages[0])
-        self.assertEqual(self.run_day(96).messages, [])
+        self.assertEqual(self.run_day(36).messages, [])
 
     def test_item_expired_when_recorded_enters_once(self):
         self.buy("Milk", "1", "L", self.on(-3), "Pantry")
@@ -98,8 +99,8 @@ class DailyRoutineTests(ApiTestCase):
         self.assertEqual(self.run_day().messages, [])
 
     def test_reserve_and_pantry_defaults(self):
-        self.buy("Alpha", "1", "kg", self.on(90), "Reserve")
-        self.buy("Bravo", "1", "kg", self.on(90), "Pantry")
+        self.buy("Alpha", "1", "kg", self.on(30), "Reserve")
+        self.buy("Bravo", "1", "kg", self.on(30), "Pantry")
         text = self.run_day().messages[0]
         self.assertIn("Alpha", text)
         self.assertNotIn("Bravo", text)
